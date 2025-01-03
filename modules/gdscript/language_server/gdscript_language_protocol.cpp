@@ -36,6 +36,7 @@
 #include "editor/editor_log.h"
 #include "editor/editor_node.h"
 #include "editor/editor_settings.h"
+#include "scene/resources/packed_scene.h"
 
 GDScriptLanguageProtocol *GDScriptLanguageProtocol::singleton = nullptr;
 
@@ -136,6 +137,7 @@ Error GDScriptLanguageProtocol::on_client_connected() {
 
 void GDScriptLanguageProtocol::on_client_disconnected(const int &p_client_id) {
 	clients.erase(p_client_id);
+	scene_cache.clear();
 	EditorNode::get_log()->add_message("[LSP] Disconnected", EditorLog::MSG_TYPE_EDITOR);
 }
 
@@ -281,7 +283,7 @@ void GDScriptLanguageProtocol::stop() {
 		Ref<LSPeer> peer = clients.get(E.key);
 		peer->connection->disconnect_from_host();
 	}
-
+	scene_cache.clear();
 	server->stop();
 }
 
@@ -345,4 +347,98 @@ GDScriptLanguageProtocol::GDScriptLanguageProtocol() {
 	set_scope("completionItem", text_document.ptr());
 	set_scope("workspace", workspace.ptr());
 	workspace->root = ProjectSettings::get_singleton()->get_resource_path();
+	scene_cache.workspace = workspace;
+}
+
+void SceneCache::_get_owners(EditorFileSystemDirectory *efsd, String p_path, List<String> &owners) {
+	if (!efsd) {
+		return;
+	}
+
+	for (int i = 0; i < efsd->get_subdir_count(); i++) {
+		_get_owners(efsd->get_subdir(i), p_path, owners);
+	}
+
+	for (int i = 0; i < efsd->get_file_count(); i++) {
+		Vector<String> deps = efsd->get_file_deps(i);
+		bool found = false;
+		for (int j = 0; j < deps.size(); j++) {
+			if (deps[j] == p_path) {
+				found = true;
+				break;
+			}
+		}
+		if (!found) {
+			continue;
+		}
+
+		owners.push_back(efsd->get_file_path(i));
+	}
+}
+
+void SceneCache::_set_owner_scene_node(String p_path) {
+	Node *owner_scene_node = nullptr;
+	List<String> owners;
+
+	if (cache.has(p_path)) {
+		return;
+	}
+
+	_get_owners(EditorFileSystem::get_singleton()->get_filesystem(), p_path, owners);
+
+	for (const String &owner : owners) {
+		NodePath owner_path = owner;
+		Ref<Resource> owner_res = ResourceLoader::load(owner_path);
+		if (Object::cast_to<PackedScene>(owner_res.ptr())) {
+			Ref<PackedScene> owner_packed_scene = Ref<PackedScene>(Object::cast_to<PackedScene>(*owner_res));
+			owner_scene_node = owner_packed_scene->instantiate();
+			break;
+		}
+	}
+
+	cache[p_path] = owner_scene_node;
+}
+
+bool SceneCache::has(const String &p_uri) {
+	return cache.has(p_uri);
+}
+
+Node *SceneCache::get(const String &p_uri) {
+	return cache[p_uri];
+}
+
+Node *SceneCache::get_for_uri(const String &p_uri) {
+	String path = workspace->get_file_path(p_uri);
+	return cache[path];
+}
+
+void SceneCache::set(const String &p_path) {
+	_set_owner_scene_node(p_path);
+}
+
+void SceneCache::set_for_uri(const String &p_uri) {
+	String path = workspace->get_file_path(p_uri);
+	_set_owner_scene_node(path);
+}
+
+void SceneCache::erase(const String &p_path) {
+	if (cache[p_path]) {
+		memdelete(cache[p_path]);
+	}
+	cache.erase(p_path);
+}
+
+void SceneCache::erase_for_uri(const String &p_uri) {
+	String path = workspace->get_file_path(p_uri);
+	memdelete(cache[path]);
+	cache.erase(path);
+}
+
+void SceneCache::clear() {
+	for (const KeyValue<String, Node *> &E : cache) {
+		if (E.value) {
+			memdelete(E.value);
+		}
+	}
+	cache.clear();
 }

@@ -31,11 +31,13 @@
 #ifndef GDSCRIPT_LANGUAGE_PROTOCOL_H
 #define GDSCRIPT_LANGUAGE_PROTOCOL_H
 
+#include "core/variant/array.h"
 #include "gdscript_text_document.h"
 #include "gdscript_workspace.h"
 
 #include "core/io/stream_peer_tcp.h"
 #include "core/io/tcp_server.h"
+#include "editor/editor_file_system.h"
 
 #include "modules/modules_enabled.gen.h" // For jsonrpc.
 #ifdef MODULE_JSONRPC_ENABLED
@@ -46,6 +48,29 @@
 
 #define LSP_MAX_BUFFER_SIZE 4194304
 #define LSP_MAX_CLIENTS 8
+
+class SceneCache {
+private:
+	friend class GDScriptLanguageProtocol;
+
+	HashMap<String, Node *> cache;
+	Ref<GDScriptWorkspace> workspace;
+	String current_resource_request_path;
+	TypedArray<String> resource_request_queue;
+
+	void _get_owners(EditorFileSystemDirectory *efsd, String p_path, List<String> &owners);
+	void _set_owner_scene_node(String p_path);
+
+public:
+	bool has(const String &p_path);
+	Node *get(const String &p_path);
+	Node *get_for_uri(const String &p_uri);
+	void set(const String &p_path);
+	void set_for_uri(const String &p_uri);
+	void erase(const String &p_path);
+	void erase_for_uri(const String &p_uri);
+	void clear();
+};
 
 class GDScriptLanguageProtocol : public JSONRPC {
 	GDCLASS(GDScriptLanguageProtocol, JSONRPC)
@@ -74,6 +99,7 @@ private:
 	static GDScriptLanguageProtocol *singleton;
 
 	HashMap<int, Ref<LSPeer>> clients;
+	SceneCache scene_cache;
 	Ref<TCPServer> server;
 	int latest_client_id = 0;
 	int next_client_id = 0;
@@ -101,6 +127,8 @@ public:
 	_FORCE_INLINE_ static GDScriptLanguageProtocol *get_singleton() { return singleton; }
 	_FORCE_INLINE_ Ref<GDScriptWorkspace> get_workspace() { return workspace; }
 	_FORCE_INLINE_ Ref<GDScriptTextDocument> get_text_document() { return text_document; }
+	_FORCE_INLINE_ SceneCache *get_scene_cache() { return &scene_cache; }
+
 	_FORCE_INLINE_ bool is_initialized() const { return _initialized; }
 
 	void poll(int p_limit_usec);
