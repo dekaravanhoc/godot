@@ -83,6 +83,7 @@ void GDScriptTextDocument::didChange(const Variant &p_param) {
 		doc.text = evt.text;
 	}
 	sync_script_content(doc.uri, doc.text);
+	GDScriptLanguageProtocol::get_singleton()->get_scene_cache()->get_for_uri(doc.uri);
 }
 
 void GDScriptTextDocument::willSaveWaitUntil(const Variant &p_param) {

@@ -31,6 +31,7 @@
 #ifndef GDSCRIPT_LANGUAGE_PROTOCOL_H
 #define GDSCRIPT_LANGUAGE_PROTOCOL_H
 
+#include "core/templates/hash_map.h"
 #include "core/variant/array.h"
 #include "gdscript_text_document.h"
 #include "gdscript_workspace.h"
@@ -49,17 +50,23 @@
 #define LSP_MAX_BUFFER_SIZE 4194304
 #define LSP_MAX_CLIENTS 8
 
+/**
+ * Used to load and cache scenes for autocompletion.
+ * */
 class SceneCache {
 private:
 	friend class GDScriptLanguageProtocol;
 
 	HashMap<String, Node *> cache;
 	Ref<GDScriptWorkspace> workspace;
-	String current_resource_request_path;
-	TypedArray<String> resource_request_queue;
+	bool is_loading = false;
+	HashMap<String, List<String>> owners_path_cache;
+	Array resource_request_queue;
 
-	void _get_owners(EditorFileSystemDirectory *efsd, String p_path, List<String> &owners);
+	void _get_owners(EditorFileSystemDirectory *p_efsd, String p_path, List<String> &r_owners);
 	void _set_owner_scene_node(String p_path);
+	void _add_owner_scene_request(String p_path);
+	void _check_thread_for_cache_update();
 
 public:
 	bool has(const String &p_path);

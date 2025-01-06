@@ -34,7 +34,6 @@
 #include "core/doc_data.h"
 #include "core/object/class_db.h"
 #include "core/templates/list.h"
-#include "scene/main/node.h"
 
 namespace lsp {
 
