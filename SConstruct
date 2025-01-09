@@ -712,9 +712,16 @@ if env.msvc:
         env.Append(CCFLAGS=["/Od"])
 else:
     if env["debug_symbols"]:
-        # Adding dwarf-4 explicitly makes stacktraces work with clang builds,
-        # otherwise addr2line doesn't understand them
-        env.Append(CCFLAGS=["-gdwarf-4"])
+        if env["platform"] == "windows":
+            if methods.using_clang(env):
+                env.Append(CCFLAGS=["-gdwarf-4"])  # clang dwarf-5 symbols are broken on Windows.
+                env.Append(LINKFLAGS=["-Wl,-pdb="])
+            else:
+                env.Append(CCFLAGS=["-gdwarf-5"])  # For gcc, only dwarf-5 symbols seem usable by libbacktrace.
+        else:
+            # Adding dwarf-4 explicitly makes stacktraces work with clang builds,
+            # otherwise addr2line doesn't understand them
+            env.Append(CCFLAGS=["-gdwarf-4"])
         if methods.using_emcc(env):
             # Emscripten only produces dwarf symbols when using "-g3".
             env.Append(CCFLAGS=["-g3"])
@@ -1014,7 +1021,9 @@ if env["vsproj"]:
 if env["compiledb"]:
     if env.scons_version < (4, 0, 0):
         # Generating the compilation DB (`compile_commands.json`) requires SCons 4.0.0 or later.
-        print_error("The `compiledb=yes` option requires SCons 4.0 or later, but your version is %s." % scons_raw_version)
+        print_error(
+            "The `compiledb=yes` option requires SCons 4.0 or later, but your version is %s." % scons_raw_version
+        )
         Exit(255)
 
     env.Tool("compilation_db")
